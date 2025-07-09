@@ -3,3 +3,4 @@ uvicorn
 pynacl
 requests
 python-dotenv
+discord-interactions
