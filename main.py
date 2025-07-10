@@ -52,34 +52,51 @@ def create_book_embed(book_data: dict):
         "title": book_data.get('title', 'Unknown Title'),
         "color": 0x0099ff,
         "url": f"https://ranobedb.org/book/{book_data.get('id', '')}",
-        "fields": [], "image": {}, "footer": {"text": "Powered by RanobeDB"}
+        "fields": [],
+        "image": {},
+        "footer": {"text": "Powered by RanobeDB"}
     }
-    if book_data.get('title_orig'):
-        embed["fields"].append({"name": "Original Title", "value": book_data['title_orig'], "inline": False})
-    if release_date := book_data.get('c_release_date'):
-        date_str = str(release_date)
-        formatted_date = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]}"
-        embed["fields"].append({"name": "Release Date", "value": formatted_date, "inline": True})
-    if lang := book_data.get('lang'):
-        embed["fields"].append({"name": "Language", "value": lang.upper(), "inline": True})
+    
+    # Add the description to the main body of the embed
+    if description := book_data.get('description'):
+        # Truncate description to avoid exceeding Discord's limits
+        max_len = 400
+        if len(description) > max_len:
+            embed['description'] = description[:max_len].strip() + "..."
+        else:
+            embed['description'] = description
+
     if image_info := book_data.get('image'):
         if filename := image_info.get('filename'):
             embed["image"]["url"] = f"https://images.ranobedb.org/{filename}"
+    
     return embed
 
 # --- Background Task to process the initial search ---
 async def process_search_command(interaction: dict):
+    """Handles the initial search and sends the follow-up message."""
     logger.info("DEBUG: Starting background search task.")
     query = interaction['data']['options'][0]['value']
     books = await asyncio.to_thread(search_ranobedb, query)
     followup_url = f"https://discord.com/api/v10/webhooks/{APPLICATION_ID}/{interaction['token']}"
 
+    response_data = {}
+
     if not books:
         response_data = {"content": f"Sorry, I couldn't find any books matching **{query}**."}
     elif len(books) == 1:
-        embed = create_book_embed(books[0])
-        response_data = {"embeds": [embed]}
+        # If there's one result, we need to fetch its full details for the description
+        logger.info(f"DEBUG: Single result found. Fetching full details for book ID {books[0]['id']}.")
+        book_id = books[0]['id']
+        book_details = await asyncio.to_thread(get_book_details, book_id)
+        
+        if book_details and 'book' in book_details:
+            embed = create_book_embed(book_details['book'])
+            response_data = {"embeds": [embed]}
+        else:
+            response_data = {"content": "Sorry, I couldn't retrieve the details for that book."}
     else:
+        # If there are multiple results, create the dropdown as before
         options = [
             {"label": book.get('title', 'Unknown Title')[:100], "value": str(book['id']), "description": f"Language: {book.get('lang', '?').upper()}"}
             for book in books
