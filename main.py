@@ -100,28 +100,20 @@ async def process_search_command(interaction: dict):
 # --- Main Web Server Endpoint ---
 @app.post("/interactions")
 async def handle_interactions(request: Request):
-    logger.info("DEBUG: Interaction received!") # CHECK 1: Did the request reach us?
-    
+    """Handles all incoming interaction requests from Discord."""
     signature = request.headers.get("x-signature-ed25519")
     timestamp = request.headers.get("x-signature-timestamp")
     body = await request.body()
-    
     if signature is None or timestamp is None or not verify_key(body, signature, timestamp, PUBLIC_KEY):
-        logger.warning("DEBUG: Signature verification failed!") # CHECK 2: Is the Public Key wrong?
         return Response(content="Bad request signature", status_code=401)
-    
-    logger.info("DEBUG: Signature verification successful.") # CHECK 2: Public Key is correct.
 
     interaction = await request.json()
     interaction_type = interaction["type"]
-    logger.info(f"DEBUG: Interaction type: {interaction_type}")
-
+    
     if interaction_type == InteractionType.PING:
-        logger.info("DEBUG: Responding to PING.")
         return JSONResponse({"type": InteractionResponseType.PONG})
 
     if interaction_type == InteractionType.APPLICATION_COMMAND:
-        logger.info("DEBUG: Deferring response and starting background task.") # CHECK 3: Are we handling the command?
         asyncio.create_task(process_search_command(interaction))
         return JSONResponse({"type": InteractionResponseType.DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE})
 
@@ -129,11 +121,18 @@ async def handle_interactions(request: Request):
         book_id = int(interaction['data']['values'][0])
         book_details = await asyncio.to_thread(get_book_details, book_id)
         
-        if book_details:
-            embed = create_book_embed(book_details)
+        if book_details and 'book' in book_details:
+            # This is the line that changed:
+            # We now pass the nested 'book' object to the embed creator.
+            embed = create_book_embed(book_details['book'])
+            
             return JSONResponse({
                 "type": InteractionResponseType.UPDATE_MESSAGE,
-                "data": {"content": "Here are the details for your selection:", "embeds": [embed], "components": []}
+                "data": {
+                    "content": "Here are the details for your selection:",
+                    "embeds": [embed],
+                    "components": [] 
+                }
             })
         else:
             return JSONResponse({
