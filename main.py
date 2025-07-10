@@ -59,8 +59,8 @@ def create_book_embed(book_data: dict):
     
     # Add the description to the main body of the embed
     if description := book_data.get('description'):
-        # Truncate description to avoid exceeding Discord's limits
-        max_len = 400
+        # Increase the character limit before truncating
+        max_len = 1024 
         if len(description) > max_len:
             embed['description'] = description[:max_len].strip() + "..."
         else:
@@ -114,6 +114,7 @@ async def process_search_command(interaction: dict):
     except Exception as e:
         logger.error(f"DEBUG: Failed to send followup message: {e}")
 
+
 # --- Main Web Server Endpoint ---
 @app.post("/interactions")
 async def handle_interactions(request: Request):
@@ -139,14 +140,12 @@ async def handle_interactions(request: Request):
         book_details = await asyncio.to_thread(get_book_details, book_id)
         
         if book_details and 'book' in book_details:
-            # This is the line that changed:
-            # We now pass the nested 'book' object to the embed creator.
             embed = create_book_embed(book_details['book'])
             
             return JSONResponse({
                 "type": InteractionResponseType.UPDATE_MESSAGE,
                 "data": {
-                    "content": "Here are the details for your selection:",
+                    "content": "", # Set to an empty string to remove the text
                     "embeds": [embed],
                     "components": [] 
                 }
